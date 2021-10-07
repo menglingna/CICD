@@ -1,0 +1,53 @@
+import groovy.json.JsonSlurperClassic
+import groovy.transform.Field
+//全局变量
+@Field CREDENTIAL_ID = '915930061@qq.com'
+@Field gitProjectUrl = 'https://github.com/moleculerjs/moleculer-examples.git'
+@Field branch = 'master'
+def gitCheckOutBranch(branch,gitProjectUrl,targetDir){
+    checkout([
+            $class: 'GitSCM',
+            branches: [[name: "*/"+branch]],
+            doGenerateSubmoduleConfigurations: false,
+            extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: targetDir]],
+            submoduleCfg: [],
+            userRemoteConfigs: [[credentialsId: CREDENTIAL_ID, url: gitProjectUrl]]
+    ])
+}
+
+def gitCheckOutBranch(branch,gitProjectUrl){
+    gitCheckOutBranch(branch,gitProjectUrl,"")
+}
+
+def readJson(file){
+    def json = readFile(file)
+    def obj = new JsonSlurperClassic().parseText(json)
+    return obj
+}
+
+def Deploy(HARBOR_IP){
+    sshPublisher(
+            publishers: [
+                    sshPublisherDesc(
+                            transfers: [
+                                    sshTransfer(
+                                            cleanRemote: false, excludes: '',
+                                            execCommand: "rm -fr /docker_build",
+                                            execTimeout: 120000, flatten: false, makeEmptyDirs: false,
+                                            noDefaultExcludes: false, patternSeparator: '[, ]+', remoteDirectory: '',
+                                            remoteDirectorySDF: false, removePrefix: '', sourceFiles: ''),
+                                    sshTransfer(cleanRemote: false, excludes: '', execCommand: '''
+                                                cd /docker_build
+                                                tar xzvf *.tar.gz
+                                                docker load -i menglingna-CI-COMMIT-SHORT-SHA.tar
+                                                docker tag ${IMAGE_VERSION} ${HARBOR_IP}/${IMAGE_VERSION}
+                                                docker login -u xiaoyu-dev -p YMaFmi8u https://registry-hangzhou.aliyuncs.com
+                                                docker push https://registry-hangzhou.aliyuncs.com/XXX-registry
+                                                kubectl apply -n xxxnamespace -f ./''',
+                                            execTimeout: 120000, flatten: false, makeEmptyDirs: false,
+                                            noDefaultExcludes: false, patternSeparator: '[, ]+', remoteDirectory: '',
+                                            remoteDirectorySDF: false, removePrefix: '', sourceFiles: '*/docker_build/*-image.tar.gz')
+                            ],
+                            usePromotionTimestamp: false, useWorkspaceInPromotion: false, verbose: false)])
+}
+
